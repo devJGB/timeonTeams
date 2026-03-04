@@ -1,0 +1,454 @@
+﻿@using System.Text
+@using System.Text.Json
+@using Azure.Core
+@using Microsoft.JSInterop
+@using TabTeams.Interop.TeamsSDK
+@using TabTeams.Timeon
+
+@inject TeamsUserCredential TeamsUserCredential
+@inject ITimeonApiClient TimeonApiClient
+@inject MicrosoftTeams MicrosoftTeams
+
+@implements IDisposable
+
+@if (isLoading)
+{
+    <div class="loading-panel">
+        <FluentProgressRing />
+    </div>
+}
+else
+{
+    <div class="timeon-tab @teamsThemeClass">
+        @if (!string.IsNullOrWhiteSpace(errorMessage))
+        {
+            <FluentCard class="alert-card error">
+                @errorMessage
+            </FluentCard>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(actionMessage))
+        {
+            <FluentCard class="alert-card info">
+                @actionMessage
+            </FluentCard>
+        }
+
+        @if (dashboard?.IsFromMockData == true)
+        {
+            <FluentCard class="alert-card warning">
+                Modo demo activo: muestra datos simulados. Cambia <code>TimeonApi:UseMockData</code> a <code>false</code> para usar la API real.
+            </FluentCard>
+        }
+
+        <section class="hero">
+            <div class="employee-block">
+                <div class="avatar">@GetInitials()</div>
+                <div class="employee-name">@GetDisplayName()</div>
+                <div class="employee-email">@userEmail</div>
+            </div>
+            <div class="clock-block">
+                <div class="clock-label">Tiempo trabajado</div>
+                <div class="clock-value">@GetElapsedText()</div>
+                <div class="clock-date">@DateTime.Now.ToString("dd/MM/yy")</div>
+            </div>
+            <div class="meta-block">
+                <div class="meta-item">
+                    <div class="meta-caption">Hora actual</div>
+                    <div class="meta-value">@currentTime.ToString("HH:mm:ss")</div>
+                </div>
+                <div class="meta-item">
+                    <div class="meta-caption">Entrada</div>
+                    <div class="meta-value">@GetStartTimeText()</div>
+                </div>
+                <div class="meta-item">
+                    <div class="meta-caption">Estado</div>
+                    <div class="meta-value status @GetStatusCssClass()">@GetStatusText()</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="actions-grid">
+            <FluentCard class="action-card">
+                <div class="action-title">Entrada</div>
+                <div class="action-button-row">
+                    <FluentButton Class="action-button" Appearance="Appearance.Accent" Disabled="@(!CanStartWork())" @onclick="StartWorkAsync">Fichar</FluentButton>
+                </div>
+            </FluentCard>
+            <FluentCard class="action-card">
+                <div class="action-title">Inicio pausa</div>
+                <div class="action-button-row">
+                    <FluentButton Class="action-button" Appearance="Appearance.Accent" Disabled="@(!CanStartBreak())" @onclick="StartBreakAsync">Iniciar</FluentButton>
+                </div>
+            </FluentCard>
+            <FluentCard class="action-card">
+                <div class="action-title">Fin pausa</div>
+                <div class="action-button-row">
+                    <FluentButton Class="action-button" Appearance="Appearance.Accent" Disabled="@(!CanEndBreak())" @onclick="EndBreakAsync">Finalizar</FluentButton>
+                </div>
+            </FluentCard>
+            <FluentCard class="action-card">
+                <div class="action-title">Salida</div>
+                <div class="action-button-row">
+                    <FluentButton Class="action-button" Appearance="Appearance.Accent" Disabled="@(!CanEndWork())" @onclick="EndWorkAsync">Fichar</FluentButton>
+                </div>
+            </FluentCard>
+        </section>
+    </div>
+}
+
+@code {
+    private bool isLoading = true;
+    private bool actionInProgress;
+    private string? errorMessage;
+    private string? actionMessage;
+    private string? userDisplayName;
+    private string? userEmail;
+    private string? ssoToken;
+    private TimeonDashboardData? dashboard;
+    private Timer? timer;
+    private DateTimeOffset currentTime = DateTimeOffset.Now;
+    private string teamsThemeClass = "teams-theme-default";
+    private DotNetObjectReference<TimeonDashboard>? themeCallbackReference;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        await InitializeTeamsThemeAsync();
+
+        timer = new Timer(
+            _ => _ = InvokeAsync(() =>
+            {
+                currentTime = DateTimeOffset.Now;
+                StateHasChanged();
+            }),
+            null,
+            TimeSpan.Zero,
+            TimeSpan.FromSeconds(1));
+
+        await LoadDashboardAsync(clearActionMessage: true);
+    }
+
+    public void Dispose()
+    {
+        timer?.Dispose();
+        themeCallbackReference?.Dispose();
+    }
+
+    private async Task InitializeTeamsThemeAsync()
+    {
+        try
+        {
+            await MicrosoftTeams.InitializeAsync();
+            var teamsContext = await MicrosoftTeams.GetTeamsContextAsync();
+            ApplyTeamsTheme(teamsContext?.App?.Theme);
+
+            themeCallbackReference = DotNetObjectReference.Create(this);
+            await MicrosoftTeams.RegisterOnThemeChangeHandlerAsync(themeCallbackReference);
+        }
+        catch
+        {
+            teamsThemeClass = "teams-theme-default";
+        }
+    }
+
+    [JSInvokable]
+    public Task OnTeamsThemeChanged(string? theme)
+    {
+        ApplyTeamsTheme(theme);
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private void ApplyTeamsTheme(string? theme)
+    {
+        var normalized = (theme ?? string.Empty).Trim().ToLowerInvariant();
+        teamsThemeClass = normalized switch
+        {
+            "dark" => "teams-theme-dark",
+            "contrast" => "teams-theme-contrast",
+            _ => "teams-theme-default"
+        };
+    }
+
+    private async Task StartWorkAsync()
+    {
+        if (dashboard?.Employee is null)
+        {
+            return;
+        }
+
+        await ExecuteActionAsync(() => TimeonApiClient.StartWorkAsync(dashboard.Employee.Id, ssoToken));
+    }
+
+    private async Task StartBreakAsync()
+    {
+        if (dashboard?.Employee is null)
+        {
+            return;
+        }
+
+        await ExecuteActionAsync(() => TimeonApiClient.StartBreakAsync(dashboard.Employee.Id, dashboard.OpenTimeLog?.Id, ssoToken));
+    }
+
+    private async Task EndBreakAsync()
+    {
+        if (dashboard?.Employee is null)
+        {
+            return;
+        }
+
+        await ExecuteActionAsync(() => TimeonApiClient.EndBreakAsync(dashboard.Employee.Id, dashboard.OpenTimeLog?.Id, ssoToken));
+    }
+
+    private async Task EndWorkAsync()
+    {
+        if (dashboard?.Employee is null)
+        {
+            return;
+        }
+
+        await ExecuteActionAsync(() => TimeonApiClient.EndWorkAsync(dashboard.Employee.Id, ssoToken));
+    }
+
+    private async Task ExecuteActionAsync(Func<Task<TimeonActionResult>> action)
+    {
+        actionInProgress = true;
+        errorMessage = null;
+
+        try
+        {
+            var result = await action();
+            actionMessage = result.Message;
+            if (!result.Success)
+            {
+                errorMessage = result.Message;
+            }
+        }
+        catch (Exception exception)
+        {
+            errorMessage = exception.Message;
+        }
+        finally
+        {
+            actionInProgress = false;
+            await LoadDashboardAsync(clearActionMessage: false);
+        }
+    }
+
+    private async Task LoadDashboardAsync(bool clearActionMessage)
+    {
+        isLoading = true;
+        if (clearActionMessage)
+        {
+            actionMessage = null;
+        }
+
+        try
+        {
+            await EnsureIdentityAsync();
+            dashboard = await TimeonApiClient.GetDashboardAsync(userEmail ?? string.Empty, ssoToken);
+            errorMessage = dashboard.ErrorMessage;
+        }
+        catch (Exception exception)
+        {
+            errorMessage = $"Error inicializando el tab: {exception.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task EnsureIdentityAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(userEmail) && !string.IsNullOrWhiteSpace(ssoToken))
+        {
+            return;
+        }
+
+        var userInfo = await TeamsUserCredential.GetUserInfoAsync();
+        userDisplayName = userInfo.DisplayName;
+
+        var accessToken = await TeamsUserCredential.GetTokenAsync(new TokenRequestContext(Array.Empty<string>()), CancellationToken.None);
+        ssoToken = accessToken.Token;
+
+        userEmail = TryReadEmailFromJwt(accessToken.Token);
+        if (string.IsNullOrWhiteSpace(userEmail))
+        {
+            userEmail = userInfo.GetType().GetProperty("UserPrincipalName")?.GetValue(userInfo)?.ToString();
+        }
+
+        if (string.IsNullOrWhiteSpace(userEmail))
+        {
+            throw new InvalidOperationException("No se pudo obtener el email desde el token SSO de Teams.");
+        }
+    }
+
+    private string GetDisplayName()
+    {
+        var name = $"{dashboard?.Employee?.UserName} {dashboard?.Employee?.LastName}".Trim();
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            return name;
+        }
+
+        if (!string.IsNullOrWhiteSpace(userDisplayName))
+        {
+            return userDisplayName;
+        }
+
+        return "Empleado";
+    }
+
+    private string GetInitials()
+    {
+        var source = GetDisplayName();
+        var initials = source
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Select(value => char.ToUpperInvariant(value[0]))
+            .Take(2)
+            .ToArray();
+
+        return initials.Length == 0 ? "TM" : new string(initials);
+    }
+
+    private string GetStartTimeText()
+    {
+        return dashboard?.OpenTimeLog?.Start?.ToLocalTime().ToString("HH:mm:ss") ?? "--:--:--";
+    }
+
+    private string GetStatusText()
+    {
+        if (!HasOpenTimeLog())
+        {
+            return "Sin fichaje";
+        }
+
+        if (IsOnBreak())
+        {
+            return "En pausa";
+        }
+
+        return "Trabajando";
+    }
+
+    private string GetStatusCssClass()
+    {
+        if (!HasOpenTimeLog())
+        {
+            return "status-off";
+        }
+
+        if (IsOnBreak())
+        {
+            return "status-break";
+        }
+
+        return "status-working";
+    }
+
+    private string GetElapsedText()
+    {
+        var elapsed = GetElapsed();
+        return $"{elapsed.Hours:00}:{elapsed.Minutes:00}:{elapsed.Seconds:00}";
+    }
+
+    private TimeSpan GetElapsed()
+    {
+        var start = dashboard?.OpenTimeLog?.Start;
+        if (start is null)
+        {
+            return TimeSpan.Zero;
+        }
+
+        var end = DateTimeOffset.Now;
+        var startBreak = dashboard?.OpenTimeLog?.StartBreak;
+        var endBreak = dashboard?.OpenTimeLog?.EndBreak;
+
+        if (startBreak is not null && endBreak is null)
+        {
+            end = startBreak.Value;
+        }
+
+        var elapsed = end - start.Value;
+        return elapsed < TimeSpan.Zero ? TimeSpan.Zero : elapsed;
+    }
+
+    private bool HasOpenTimeLog()
+    {
+        return dashboard?.OpenTimeLog?.Id > 0;
+    }
+
+    private bool IsOnBreak()
+    {
+        return HasOpenTimeLog() && dashboard?.OpenTimeLog?.StartBreak is not null && dashboard?.OpenTimeLog?.EndBreak is null;
+    }
+
+    private bool CanStartWork()
+    {
+        return !actionInProgress && !HasOpenTimeLog() && dashboard?.Employee is not null;
+    }
+
+    private bool CanStartBreak()
+    {
+        return !actionInProgress && HasOpenTimeLog() && !IsOnBreak();
+    }
+
+    private bool CanEndBreak()
+    {
+        return !actionInProgress && IsOnBreak();
+    }
+
+    private bool CanEndWork()
+    {
+        return !actionInProgress && HasOpenTimeLog();
+    }
+
+    private static string? TryReadEmailFromJwt(string jwt)
+    {
+        if (string.IsNullOrWhiteSpace(jwt))
+        {
+            return null;
+        }
+
+        var parts = jwt.Split('.');
+        if (parts.Length < 2)
+        {
+            return null;
+        }
+
+        try
+        {
+            var payload = parts[1];
+            payload = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=')
+                .Replace('-', '+')
+                .Replace('_', '/');
+            var payloadBytes = Convert.FromBase64String(payload);
+            var payloadJson = Encoding.UTF8.GetString(payloadBytes);
+
+            using var document = JsonDocument.Parse(payloadJson);
+            foreach (var claimName in new[] { "preferred_username", "upn", "email", "unique_name" })
+            {
+                if (document.RootElement.TryGetProperty(claimName, out var claimValue) && claimValue.ValueKind == JsonValueKind.String)
+                {
+                    var value = claimValue.GetString();
+                    if (!string.IsNullOrWhiteSpace(value))
+                    {
+                        return value;
+                    }
+                }
+            }
+        }
+        catch
+        {
+            return null;
+        }
+
+        return null;
+    }
+}
