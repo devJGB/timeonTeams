@@ -17,6 +17,7 @@
     --timeon-success: #92c353;
     --timeon-break: #f8b84e;
     --timeon-off: #d13438;
+    --timeon-finished: #94a3bc7;
     --timeon-info: #6264a7;
     --timeon-warning: #c19c00;
     --timeon-accent: #6264a7;
@@ -30,41 +31,43 @@
     border-radius: 8px;
 }
 
-.timeon-tab.teams-theme-dark {
-    --timeon-bg: #201f1f;
-    --timeon-hero-from: #292827;
-    --timeon-hero-to: #292827;
-    --timeon-hero-text: #ffffff;
-    --timeon-card-bg: #ffffff;
-    --timeon-border-subtle: #3b3a39;
-    --timeon-text-primary: #ffffff;
-    --timeon-text-secondary: #d6d6d6;
-    --timeon-success: #92c353;
-    --timeon-break: #f8b84e;
-    --timeon-off: #f1707b;
-    --timeon-info: #7f85f5;
-    --timeon-warning: #fce100;
-    --timeon-accent: #7f85f5;
-    --timeon-action-card-title: #242424;
-}
+    .timeon-tab.teams-theme-dark {
+        --timeon-bg: #201f1f;
+        --timeon-hero-from: #292827;
+        --timeon-hero-to: #292827;
+        --timeon-hero-text: #ffffff;
+        --timeon-card-bg: #ffffff;
+        --timeon-border-subtle: #3b3a39;
+        --timeon-text-primary: #ffffff;
+        --timeon-text-secondary: #d6d6d6;
+        --timeon-success: #92c353;
+        --timeon-break: #f8b84e;
+        --timeon-off: #f1707b;
+        --timeon-finished: #94a3bc7;
+        --timeon-info: #7f85f5;
+        --timeon-warning: #fce100;
+        --timeon-accent: #7f85f5;
+        --timeon-action-card-title: #242424;
+    }
 
-.timeon-tab.teams-theme-contrast {
-    --timeon-bg: #000000;
-    --timeon-hero-from: #000000;
-    --timeon-hero-to: #000000;
-    --timeon-hero-text: #ffffff;
-    --timeon-card-bg: #ffffff;
-    --timeon-border-subtle: #ffffff;
-    --timeon-text-primary: #ffffff;
-    --timeon-text-secondary: #ffffff;
-    --timeon-success: #00ff00;
-    --timeon-break: #ffd700;
-    --timeon-off: #ff4d4d;
-    --timeon-info: #00ffff;
-    --timeon-warning: #ffff00;
-    --timeon-accent: #6264a7;
-    --timeon-action-card-title: #242424;
-}
+    .timeon-tab.teams-theme-contrast {
+        --timeon-bg: #000000;
+        --timeon-hero-from: #000000;
+        --timeon-hero-to: #000000;
+        --timeon-hero-text: #ffffff;
+        --timeon-card-bg: #ffffff;
+        --timeon-border-subtle: #ffffff;
+        --timeon-text-primary: #ffffff;
+        --timeon-text-secondary: #ffffff;
+        --timeon-success: #00ff00;
+        --timeon-break: #ffd700;
+        --timeon-off: #ff4d4d;
+        --timeon-finished: #cfcfcf;
+        --timeon-info: #00ffff;
+        --timeon-warning: #ffff00;
+        --timeon-accent: #6264a7;
+        --timeon-action-card-title: #242424;
+    }
 
 .alert-card {
     margin-bottom: 0.75rem;
@@ -172,6 +175,7 @@
 .meta-value.status.status-working { color: var(--timeon-success) !important; }
 .meta-value.status.status-break { color: var(--timeon-break) !important; }
 .meta-value.status.status-off { color: var(--timeon-off) !important; }
+.meta-value.status.status-finished {color: var(--timeon-finished) !important; }
 
 .actions-grid {
     margin-top: 0.9rem;

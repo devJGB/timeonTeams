@@ -98,6 +98,7 @@ else
 }
 
 @code {
+
     private bool isLoading = true;
     private bool actionInProgress;
     private string? errorMessage;
@@ -105,6 +106,8 @@ else
     private string? userDisplayName;
     private string? userEmail;
     private string? ssoToken;
+    private string? statusOverrideText;
+    private string? statusOverrideCssClass;
     private TimeonDashboardData? dashboard;
     private Timer? timer;
     private DateTimeOffset currentTime = DateTimeOffset.Now;
@@ -211,7 +214,41 @@ else
             return;
         }
 
-        await ExecuteActionAsync(() => TimeonApiClient.EndWorkAsync(dashboard.Employee.Id, ssoToken));
+        try
+        {
+            var result = await TimeonApiClient.EndWorkAsync(dashboard.Employee.Id, ssoToken);
+            actionMessage = result.Message;
+
+            if (!result.Success)
+            {
+                errorMessage = result.Message;
+                return;
+            }
+
+            // Reflejar inmediatamente en la UI que la jornada ha terminada, aunque 
+            // la respues posterior del dashboard no traiga un estado "Finished" explícito.
+            dashboard = new TimeonDashboardData
+                {
+                    Employee = dashboard.Employee,
+                    OpenTimeLog = null
+                };
+
+            statusOverrideText = "Finalizado";
+            statusOverrideCssClass = "status-finished";
+
+            // Reconciliar con backend para mantener el resto del dasboard alineado.
+            await LoadDashboardAsync(clearActionMessage: false);
+        }
+        catch (Exception exception)
+        {
+            errorMessage = exception.Message;
+        }
+        finally
+        {
+            actionInProgress = false;
+            await InvokeAsync(StateHasChanged);
+        }
+        
     }
 
     private async Task ExecuteActionAsync(Func<Task<TimeonActionResult>> action)
@@ -251,6 +288,13 @@ else
         {
             await EnsureIdentityAsync();
             dashboard = await TimeonApiClient.GetDashboardAsync(userEmail ?? string.Empty, ssoToken);
+            // Si al recargar volvemos a tener un fichaje abierto real, limpiamos cualquier estado visual transitorio
+            // dejado por una acción anterior
+            if (dashboard?.OpenTimeLog is not null)
+            {
+                statusOverrideText = null;
+                statusOverrideCssClass = null;
+            }
             errorMessage = dashboard.ErrorMessage;
         }
         catch (Exception exception)
@@ -326,7 +370,9 @@ else
     {
         if (!HasOpenTimeLog())
         {
-            return "Sin fichaje";
+            return !string.IsNullOrWhiteSpace(statusOverrideText)
+            ? statusOverrideText
+            : "Sin fichaje";
         }
 
         if (IsOnBreak())
@@ -341,7 +387,9 @@ else
     {
         if (!HasOpenTimeLog())
         {
-            return "status-off";
+            return !string.IsNullOrWhiteSpace(statusOverrideCssClass)
+            ? statusOverrideCssClass
+            : "status-off";
         }
 
         if (IsOnBreak())
@@ -381,7 +429,9 @@ else
 
     private bool HasOpenTimeLog()
     {
-        return dashboard?.OpenTimeLog?.Id > 0;
+        // Un fichaje sólo debe considerarse abierto si existe y todavía no tiene fin.
+        // Esto blinda la UI por en alguna recarga llega un timelog ya cerrado.
+        return dashboard?.OpenTimeLog?.Id > 0 && dashboard?.OpenTimeLog?.End is null;
     }
 
     private bool IsOnBreak()
