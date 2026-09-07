@@ -281,28 +281,70 @@ public sealed class TimeonApiClient : ITimeonApiClient
 
         if (root.ValueKind is JsonValueKind.Array)
         {
-            // Si viene un array, tomar primer elemento si es objeto
-            var firstItem = root.EnumerateArray().FirstOrDefault();
-            if (firstItem.ValueKind is JsonValueKind.Object)
-            {
-                return JsonSerializer.Deserialize<TimeonTimeLog>(firstItem.GetRawText(), JsonSerializerOptions);
-            }
-            return null;
+            // Algunas respuestas pueden devolver una colección de fichajes del día.
+            // En ese caso no debemos quedarnos con el primer elemento sin más, sino
+            // localizar el fichaje realmente abierto (sin hora de fin) y, si hubiera varios,
+            // usar el más reciente por hora de inicio.
+            var timeLogs = JsonSerializer.Deserialize<List<TimeonTimeLog>>(root.GetRawText(), JsonSerializerOptions) ?? [];
+            return SelectOpenTimeLogFromCollection(timeLogs);
         }
 
         // Si el root es objeto y contiene "id" asumimos que es el mismo timelog
         if (root.ValueKind is JsonValueKind.Object && root.TryGetProperty("id", out _))
         {
-            return JsonSerializer.Deserialize<TimeonTimeLog>(root.GetRawText(), JsonSerializerOptions);
+            // Aunuqe la API devuelva un objeto con Id, sólo se considera abierto si no tiene fecha/hora de fin.
+            return NormalizeOpenTimeLog(
+                JsonSerializer.Deserialize<TimeonTimeLog>(root.GetRawText(), JsonSerializerOptions));
         }
 
         // Si viene envuelto (ej. { data: { timelog: {...} } }) intentar extraer el objeto
         if (root.ValueKind is JsonValueKind.Object && TryGetPropertyObject(root, out var objectElement))
         {
-            return JsonSerializer.Deserialize<TimeonTimeLog>(objectElement.GetRawText(), JsonSerializerOptions);
+            // Algunas respuestas vienen envueltas; igualemnte normalizamos el resultado para no conservar 
+            // fichajes ya cerrados en el dashboard
+            return NormalizeOpenTimeLog( 
+                JsonSerializer.Deserialize<TimeonTimeLog>(objectElement.GetRawText(), JsonSerializerOptions));
         }
 
         return null;
+    }
+
+    // Selecciona el fichaje realmente abierto desde una colección devuelta por la API.
+    // - Filtra registros nulos, inválidos o ya cerrados.
+    // _ Si hubiese más de uno, prioriza el más reciente por hora de inico.
+    // Esto evita que la pestaña tome por error un fichaje anterior del día.
+    private static TimeonTimeLog? SelectOpenTimeLogFromCollection(IEnumerable<TimeonTimeLog> timeLogs)
+    {
+        return timeLogs
+            .Select(NormalizeOpenTimeLog)
+            .Where(timeLog => timeLog is not null)
+            .OrderByDescending(timeLog => timeLog!.Start ?? DateTimeOffset.MinValue)
+            .FirstOrDefault();
+    }
+
+    // Normaliza la respuesta del fichaje abierto para la UI.
+    // - Si no hay objeto, devuelve null.
+    // - Si no tiene Id válido, devuelve null.
+    // - Si el fichaje ya tiene hora de fin, no debe considerarse abierto, aunque la API haya devuelto el objeto igualmente.
+    // Esto evits que la pestaña se quede mostrando "Trabajando" después de cerrar jornada.
+    private static TimeonTimeLog? NormalizeOpenTimeLog(TimeonTimeLog? timelog)
+    {
+        if (timelog is null)
+        {
+            return null;
+        }
+
+        if (timelog.Id <= 0)
+        {
+            return null;
+        }
+
+        if(timelog.End is not  null)
+        {
+            return null;
+        }
+
+        return timelog;
     }
 
     // Método general para hacer GET y devolver el body como string.
