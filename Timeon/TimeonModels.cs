@@ -4,6 +4,10 @@ public sealed class TimeonDashboardData
 {
     public TimeonUser? Employee { get; init; }
     public TimeonTimeLog? OpenTimeLog { get; init; }
+
+    // Colección de fichajes del día para mostrar el resumen debajo de la cabecera.
+    // Incluye el fichaje principial abierto si existe y también los ya finalizados.
+    public IReadOnlyList<TimeonTimeLog> DayTimeLogs { get; init; } 
     public string? ErrorMessage { get; init; }
     public DateTimeOffset LoadedAtUtc { get; init; } = DateTimeOffset.UtcNow;
     public bool IsFromMockData { get; init; }

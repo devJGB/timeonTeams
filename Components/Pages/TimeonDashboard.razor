@@ -69,31 +69,109 @@ else
         </section>
 
         <section class="actions-grid">
-            <FluentCard class="action-card">
+            <!-- Reemplazamos FluentCard por div normal -->
+            <div class="action-card">
                 <div class="action-title">Entrada</div>
                 <div class="action-button-row">
                     <FluentButton Class="action-button" Appearance="Appearance.Accent" Disabled="@(!CanStartWork())" @onclick="StartWorkAsync">Fichar</FluentButton>
                 </div>
-            </FluentCard>
-            <FluentCard class="action-card">
+            </div>
+
+            <div class="action-card">
                 <div class="action-title">Inicio pausa</div>
                 <div class="action-button-row">
                     <FluentButton Class="action-button" Appearance="Appearance.Accent" Disabled="@(!CanStartBreak())" @onclick="StartBreakAsync">Iniciar</FluentButton>
                 </div>
-            </FluentCard>
-            <FluentCard class="action-card">
+            </div>
+
+            <div class="action-card">
                 <div class="action-title">Fin pausa</div>
                 <div class="action-button-row">
                     <FluentButton Class="action-button" Appearance="Appearance.Accent" Disabled="@(!CanEndBreak())" @onclick="EndBreakAsync">Finalizar</FluentButton>
                 </div>
-            </FluentCard>
-            <FluentCard class="action-card">
+            </div>
+
+            <div class="action-card">
                 <div class="action-title">Salida</div>
                 <div class="action-button-row">
                     <FluentButton Class="action-button" Appearance="Appearance.Accent" Disabled="@(!CanEndWork())" @onclick="EndWorkAsync">Fichar</FluentButton>
                 </div>
-            </FluentCard>
+            </div>
         </section>
+
+
+        @if (HasDayTimeLogs())
+        {
+            <section class="day-summary-section">
+                <div class="day-summary-header">
+                    <div>
+                        <div class="day-summary-title">Fichajes de hoy</div>
+                        <div class="day-summary-subtitle">
+                            Resumen del turno principal y de cualquier otro registro realizado durante el día.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="day-summary-list">
+                    @foreach (var timeLog in GetDayTimeLogs())
+                    {
+                        <!-- 🔴 CAMBIADO: De <FluentCard> a <div class="..."> -->
+                        <div class="day-summary-card @GetDaySummaryCardClass(timeLog)">
+                            <div class="day-summary-card-header">
+                                <div class="day-summary-card-title">
+                                    Fichaje @(FormatTime(timeLog.Start))
+                                </div>
+
+                                <div class="day-summary-status @GetTimeLogStatusCssClass(timeLog)">
+                                    @GetTimeLogStatusText(timeLog)
+                                </div>
+                            </div>
+
+                            <div class="day-summary-grid">
+                                <div class="day-summary-item">
+                                    <div class="day-summary-label">Entrada</div>
+                                    <div class="day-summary-value">@FormatTime(timeLog.Start)</div>
+                                </div>
+
+                                <div class="day-summary-item">
+                                    <div class="day-summary-label">Inicio pausa</div>
+                                    <div class="day-summary-value">@FormatTime(timeLog.StartBreak)</div>
+                                </div>
+
+                                <div class="day-summary-item">
+                                    <div class="day-summary-label">Fin pausa</div>
+                                    <div class="day-summary-value">@FormatTime(timeLog.EndBreak)</div>
+                                </div>
+
+                                <div class="day-summary-item">
+                                    <div class="day-summary-label">Salida</div>
+                                    <div class="day-summary-value">@FormatTime(timeLog.End)</div>
+                                </div>
+
+                                <div class="day-summary-item">
+                                    <div class="day-summary-label">Estado</div>
+                                    <div class="day-summary-value @GetTimeLogStatusCssClass(timeLog)">
+                                        @GetTimeLogStatusText(timeLog)
+                                    </div>
+                                </div>
+
+                                <div class="day-summary-item">
+                                    <div class="day-summary-label">Tiempo trabajado</div>
+                                    <div class="day-summary-value">@GetWorkDurationText(timeLog)</div>
+                                </div>
+
+                                <div class="day-summary-item">
+                                    <div class="day-summary-label">Tiempo total turno</div>
+                                    <div class="day-summary-value">@GetShiftDurationText(timeLog)</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 🔴 CAMBIADO: Cierre de div -->
+                    }
+                </div>
+            </section>
+        }
     </div>
 }
 
@@ -113,6 +191,7 @@ else
     private DateTimeOffset currentTime = DateTimeOffset.Now;
     private string teamsThemeClass = "teams-theme-default";
     private DotNetObjectReference<TimeonDashboard>? themeCallbackReference;
+
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -248,7 +327,7 @@ else
             actionInProgress = false;
             await InvokeAsync(StateHasChanged);
         }
-        
+
     }
 
     private async Task ExecuteActionAsync(Func<Task<TimeonActionResult>> action)
@@ -427,6 +506,133 @@ else
         return elapsed < TimeSpan.Zero ? TimeSpan.Zero : elapsed;
     }
 
+    // Helpers del resumen timeLogs
+    private bool HasDayTimeLogs()
+    {
+        return dashboard?.DayTimeLogs?.Count > 0;
+    }
+
+    private IReadOnlyList<TimeonTimeLog> GetDayTimeLogs()
+    {
+        return dashboard?.DayTimeLogs ?? [];
+    }
+
+    private bool IsCurrentTimeLog(TimeonTimeLog timeLog)
+    {
+        return dashboard?.OpenTimeLog?.Id == timeLog.Id && HasOpenTimeLog();
+    }
+
+    private static string FormatTime(DateTimeOffset? value)
+    {
+        return value?.ToLocalTime().ToString("HH:mm:ss") ?? "--:--:--";
+    }
+
+    private string GetTimeLogStatusText(TimeonTimeLog timeLog)
+    {
+        if (timeLog.End is not null)
+        {
+            return "Finalizado";
+        }
+
+        if (timeLog.StartBreak is not null && timeLog.EndBreak is null)
+        {
+            return "En pausa";
+        }
+
+        if (timeLog.Start is not null)
+        {
+            return "Trabajando";
+        }
+
+        return "Sin fichaje";
+    }
+
+    private string GetTimeLogStatusCssClass(TimeonTimeLog timeLog)
+    {
+        if (timeLog.End is not null)
+        {
+            return "status-finished";
+        }
+
+        if (timeLog.StartBreak is not null && timeLog.EndBreak is null)
+        {
+            return "status-break";
+        }
+
+        if (timeLog.Start is not null)
+        {
+            return "status-working";
+        }
+
+        return "status-off";
+    }
+
+    private string GetWorkDurationText(TimeonTimeLog timeLog)
+    {
+        return FormatDuration(GetWorkedDuration(timeLog));
+    }
+
+    private string GetShiftDurationText(TimeonTimeLog timeLog)
+    {
+        return FormatDuration(GetShiftDuration(timeLog));
+    }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        return $"{(int)duration.TotalHours:00}:{duration.Minutes:00}:{duration.Seconds:00}";
+    }
+
+    // Tiempo realmente trabajado:
+    // desde start hasta End o hasta ahora
+    // - restando la pausa si está completa
+    // - si la pausa está abierta, se cogela el cómputo en starBreak
+    private static TimeSpan GetWorkedDuration(TimeonTimeLog timeLog)
+    {
+        if (timeLog.Start is null)
+        {
+            return TimeSpan.Zero;
+        }
+
+        var effectiveEnd = timeLog.End ?? DateTimeOffset.Now;
+
+        if (timeLog.StartBreak is not null && timeLog.EndBreak is null)
+        {
+            effectiveEnd = timeLog.StartBreak.Value;
+        }
+
+        var duration = effectiveEnd - timeLog.Start.Value;
+
+        if (timeLog.StartBreak is not null && timeLog.EndBreak is not null)
+        {
+            duration -= (timeLog.EndBreak.Value - timeLog.StartBreak.Value);
+        }
+
+        return duration < TimeSpan.Zero ? TimeSpan.Zero : duration;
+    }
+
+    // DUración total del turno:
+    // - desde Start hasta End o hasta ahora
+    // - incluyendo el tiempo en pausa
+    private static TimeSpan GetShiftDuration(TimeonTimeLog timeLog)
+    {
+        if (timeLog.Start is null)
+        {
+            return TimeSpan.Zero;
+        }
+
+        var effectiveEnd = timeLog.End ?? DateTimeOffset.Now;
+        var duration = effectiveEnd - timeLog.Start.Value;
+
+        return duration < TimeSpan.Zero ? TimeSpan.Zero : duration;
+    }
+
+    private string GetDaySummaryCardClass(TimeonTimeLog timeLog)
+    {
+        return IsCurrentTimeLog(timeLog)
+            ? "day-summary-card is-current"
+            : "day-summary-card";
+    }
+    /// End helper resumen timelogs
     private bool HasOpenTimeLog()
     {
         // Un fichaje sólo debe considerarse abierto si existe y todavía no tiene fin.

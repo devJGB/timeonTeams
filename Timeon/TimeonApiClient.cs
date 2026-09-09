@@ -70,15 +70,18 @@ public sealed class TimeonApiClient : ITimeonApiClient
                 };
             }
 
+            // Recuperar los fichajes que el backend devuelve para el dashboard.
+            // A partir de esa colección derivamos tanto el fichaje abierto como el resumen del día.
+            var dayTimeLogs = await GetTimeLogsForDashboardAsync(employee.Id, accessToken, cancellationToken);
+            var openTimelog = SelectOpenTimeLogFromCollection(dayTimeLogs);
 
-
-            // Si existe, obtener el time log abierto (si lo hay)
-            var openTimeLog = await GetOpenTimeLogAsync(employee.Id, accessToken, cancellationToken);
             return new TimeonDashboardData
             {
                 Employee = employee,
-                OpenTimeLog = openTimeLog
+                OpenTimeLog = openTimelog,
+                DayTimeLogs = dayTimeLogs
             };
+
         }
         catch (UnauthorizedAccessException unauthorizedException)
         {
@@ -257,18 +260,18 @@ public sealed class TimeonApiClient : ITimeonApiClient
         return [];
     }
 
-    // Obtiene el time log abierto de un empleado.
-    // El método tolera varias formas de respuesta:
-    // - null/undefined -> devuelve null
-    // - array -> toma el primer objeto
-    // - objeto directo con propiedades del timelog
-    // - objeto envuelto en { data: { timelog: {...} } } etc.
-    private async Task<TimeonTimeLog?> GetOpenTimeLogAsync(int employeeId, string? accessToken, CancellationToken cancellationToken)
+    // Obtiene los fichajes que la API devuelve para pintar el dashboard.
+    // El backend puede devolver:
+    // - una coleción con los registros del día.
+    // - un único objeto,
+    // - o una respuesta envuelta.
+    // Después normalizamos y ordenamos la colección para usarla en la UI.
+    private async Task<List<TimeonTimeLog?>> GetTimeLogsForDashboardAsync(int employeeId, string? accessToken, CancellationToken cancellationToken)
     {
         var responseJson = await GetAsStringAsync($"/api/TimeLog/timelogopenbyemployee/{employeeId}", accessToken, cancellationToken);
         if (string.IsNullOrWhiteSpace(responseJson))
         {
-            return null;
+            return [];
         }
 
         using var document = JsonDocument.Parse(responseJson);
@@ -276,39 +279,62 @@ public sealed class TimeonApiClient : ITimeonApiClient
 
         if (root.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
         {
-            return null;
+            return [];
         }
 
         if (root.ValueKind is JsonValueKind.Array)
         {
-            // Algunas respuestas pueden devolver una colección de fichajes del día.
-            // En ese caso no debemos quedarnos con el primer elemento sin más, sino
-            // localizar el fichaje realmente abierto (sin hora de fin) y, si hubiera varios,
-            // usar el más reciente por hora de inicio.
             var timeLogs = JsonSerializer.Deserialize<List<TimeonTimeLog>>(root.GetRawText(), JsonSerializerOptions) ?? [];
-            return SelectOpenTimeLogFromCollection(timeLogs);
+            return NormalizeDashboardTimeLogs(timeLogs);
         }
 
-        // Si el root es objeto y contiene "id" asumimos que es el mismo timelog
+        // Si la API devuelve un único objeto con "id", lo tratamo como colección de un solo elemento.
         if (root.ValueKind is JsonValueKind.Object && root.TryGetProperty("id", out _))
         {
-            // Aunuqe la API devuelva un objeto con Id, sólo se considera abierto si no tiene fecha/hora de fin.
-            return NormalizeOpenTimeLog(
-                JsonSerializer.Deserialize<TimeonTimeLog>(root.GetRawText(), JsonSerializerOptions));
+            var timelog = JsonSerializer.Deserialize<TimeonTimeLog>(root.GetRawText(), JsonSerializerOptions);
+            return NormalizeDashboardTimeLogs(timelog is null ?[] : [timelog]);
         }
 
-        // Si viene envuelto (ej. { data: { timelog: {...} } }) intentar extraer el objeto
+        // Si viene envuelto, intentamos extraer primero un array y, si no, un objeto.
+        if (root.ValueKind is JsonValueKind.Object && TryGetPropertyArray(root, out var arrayElement))
+        {
+            var timelog = JsonSerializer.Deserialize<List<TimeonTimeLog>>(arrayElement.GetRawText(), JsonSerializerOptions) ?? [];
+
+            return NormalizeDashboardTimeLogs(timelog);
+        }
+        
+
         if (root.ValueKind is JsonValueKind.Object && TryGetPropertyObject(root, out var objectElement))
         {
-            // Algunas respuestas vienen envueltas; igualemnte normalizamos el resultado para no conservar 
-            // fichajes ya cerrados en el dashboard
-            return NormalizeOpenTimeLog( 
-                JsonSerializer.Deserialize<TimeonTimeLog>(objectElement.GetRawText(), JsonSerializerOptions));
+            var timeLog = JsonSerializer.Deserialize<TimeonTimeLog>(objectElement.GetRawText(), JsonSerializerOptions);
+            return NormalizeDashboardTimeLogs(timeLog is null ? [] : [timeLog]);
         }
 
-        return null;
+        return [];
     }
 
+
+    /// HELPERS
+    // Normaliza la colección usada por el dashboard
+    // - Elimina registros si ID válido.
+    // - Mantiene los fichajes del día actual.
+    // - Conserva un fichaje abierto, aunque por algún motivo venfa de otro día.
+    // - Ordena de más reciente a más antigua pata que el re resumen quede natural en la UI.
+    private static List<TimeonTimeLog> NormalizeDashboardTimeLogs(IEnumerable<TimeonTimeLog> timeLogs)
+    {
+        var today = DateTimeOffset.Now.Date;
+
+        return timeLogs
+            .Where(timeLog => timeLog.Id > 0)
+            .Where(timeLog =>
+                IsSameLocalDate(timeLog.Start, today) ||
+                IsSameLocalDate(timeLog.End, today) ||
+                timeLog.End is null)
+            .OrderByDescending(timeLog => timeLog.Start ?? DateTimeOffset.MinValue)
+            .ToList();
+    }
+
+    
     // Selecciona el fichaje realmente abierto desde una colección devuelta por la API.
     // - Filtra registros nulos, inválidos o ya cerrados.
     // _ Si hubiese más de uno, prioriza el más reciente por hora de inico.
@@ -322,6 +348,12 @@ public sealed class TimeonApiClient : ITimeonApiClient
             .FirstOrDefault();
     }
 
+    // compara una fecha del timelog con el día local actual.
+    // Lo usamos para filtar el redumen del dia sin depender de CreatedAt.
+    private static bool IsSameLocalDate(DateTimeOffset? value, DateTime today)
+    {
+        return value?.ToLocalTime().Date == today;
+    }
     // Normaliza la respuesta del fichaje abierto para la UI.
     // - Si no hay objeto, devuelve null.
     // - Si no tiene Id válido, devuelve null.
@@ -346,6 +378,8 @@ public sealed class TimeonApiClient : ITimeonApiClient
 
         return timelog;
     }
+
+    /// End HELPER
 
     // Método general para hacer GET y devolver el body como string.
     // - Resuelve token vía ResolveApiAccessTokenAsync.
