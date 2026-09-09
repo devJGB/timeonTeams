@@ -5,6 +5,9 @@
     justify-content: center;
 }
 
+/* ==========================================================================
+   TEMA CLARO (Por defecto)
+   ========================================================================== */
 .timeon-tab {
     --timeon-bg: #f3f2f1;
     --timeon-hero-from: #ffffff;
@@ -17,11 +20,11 @@
     --timeon-success: #92c353;
     --timeon-break: #f8b84e;
     --timeon-off: #d13438;
+    --timeon-finished: #94a3bc;
     --timeon-info: #6264a7;
     --timeon-warning: #c19c00;
     --timeon-accent: #6264a7;
     --timeon-action-card-title: #242424;
-
     max-width: 980px;
     margin: 0 auto;
     padding: 1rem 1rem 1.25rem;
@@ -30,42 +33,53 @@
     border-radius: 8px;
 }
 
-.timeon-tab.teams-theme-dark {
-    --timeon-bg: #201f1f;
-    --timeon-hero-from: #292827;
-    --timeon-hero-to: #292827;
-    --timeon-hero-text: #ffffff;
-    --timeon-card-bg: #ffffff;
-    --timeon-border-subtle: #3b3a39;
-    --timeon-text-primary: #ffffff;
-    --timeon-text-secondary: #d6d6d6;
-    --timeon-success: #92c353;
-    --timeon-break: #f8b84e;
-    --timeon-off: #f1707b;
-    --timeon-info: #7f85f5;
-    --timeon-warning: #fce100;
-    --timeon-accent: #7f85f5;
-    --timeon-action-card-title: #242424;
-}
+    /* ==========================================================================
+   TEMA OSCURO
+   ========================================================================== */
+    .timeon-tab.teams-theme-dark {
+        --timeon-bg: #201f1f;
+        --timeon-hero-from: #292827;
+        --timeon-hero-to: #292827;
+        --timeon-hero-text: #ffffff;
+        --timeon-card-bg: #292827;
+        --timeon-border-subtle: #3b3a39;
+        --timeon-text-primary: #ffffff;
+        --timeon-text-secondary: #d6d6d6;
+        --timeon-success: #92c353;
+        --timeon-break: #f8b84e;
+        --timeon-off: #f1707b;
+        --timeon-finished: #94a3bc;
+        --timeon-info: #7f85f5;
+        --timeon-warning: #fce100;
+        --timeon-accent: #7f85f5;
+        --timeon-action-card-title: #ffffff;
+    }
 
-.timeon-tab.teams-theme-contrast {
-    --timeon-bg: #000000;
-    --timeon-hero-from: #000000;
-    --timeon-hero-to: #000000;
-    --timeon-hero-text: #ffffff;
-    --timeon-card-bg: #ffffff;
-    --timeon-border-subtle: #ffffff;
-    --timeon-text-primary: #ffffff;
-    --timeon-text-secondary: #ffffff;
-    --timeon-success: #00ff00;
-    --timeon-break: #ffd700;
-    --timeon-off: #ff4d4d;
-    --timeon-info: #00ffff;
-    --timeon-warning: #ffff00;
-    --timeon-accent: #6264a7;
-    --timeon-action-card-title: #242424;
-}
+    /* ==========================================================================
+   TEMA ALTO CONTRASTE
+   ========================================================================== */
+    .timeon-tab.teams-theme-contrast {
+        --timeon-bg: #000000;
+        --timeon-hero-from: #000000;
+        --timeon-hero-to: #000000;
+        --timeon-hero-text: #ffffff;
+        --timeon-card-bg: #000000;
+        --timeon-border-subtle: #ffffff;
+        --timeon-text-primary: #ffffff;
+        --timeon-text-secondary: #ffffff;
+        --timeon-success: #00ff00;
+        --timeon-break: #ffd700;
+        --timeon-off: #ff4d4d;
+        --timeon-finished: #cfcfcf;
+        --timeon-info: #00ffff;
+        --timeon-warning: #ffff00;
+        --timeon-accent: #1aebff;
+        --timeon-action-card-title: #ffffff;
+    }
 
+/* ==========================================================================
+   ALERTAS
+   ========================================================================== */
 .alert-card {
     margin-bottom: 0.75rem;
     padding: 0.75rem;
@@ -75,10 +89,21 @@
     border-radius: 8px;
 }
 
-.alert-card.error { border-left: 4px solid var(--timeon-off); }
-.alert-card.info { border-left: 4px solid var(--timeon-info); }
-.alert-card.warning { border-left: 4px solid var(--timeon-warning); }
+    .alert-card.error {
+        border-left: 4px solid var(--timeon-off);
+    }
 
+    .alert-card.info {
+        border-left: 4px solid var(--timeon-info);
+    }
+
+    .alert-card.warning {
+        border-left: 4px solid var(--timeon-warning);
+    }
+
+/* ==========================================================================
+   HERO & DATOS EMPLEADO
+   ========================================================================== */
 .hero {
     background: linear-gradient(180deg, var(--timeon-hero-from) 0%, var(--timeon-hero-to) 100%);
     color: var(--timeon-hero-text);
@@ -125,7 +150,9 @@
     color: var(--timeon-text-secondary) !important;
 }
 
-.clock-block { text-align: center; }
+.clock-block {
+    text-align: center;
+}
 
 .clock-label {
     font-size: 0.8rem;
@@ -165,14 +192,29 @@
     color: var(--timeon-text-primary) !important;
 }
 
-.meta-value.status {
-    font-weight: 700;
-}
+    .meta-value.status {
+        font-weight: 700;
+    }
 
-.meta-value.status.status-working { color: var(--timeon-success) !important; }
-.meta-value.status.status-break { color: var(--timeon-break) !important; }
-.meta-value.status.status-off { color: var(--timeon-off) !important; }
+        .meta-value.status.status-working {
+            color: var(--timeon-success) !important;
+        }
 
+        .meta-value.status.status-break {
+            color: var(--timeon-break) !important;
+        }
+
+        .meta-value.status.status-off {
+            color: var(--timeon-off) !important;
+        }
+
+        .meta-value.status.status-finished {
+            color: var(--timeon-finished) !important;
+        }
+
+/* ==========================================================================
+   REJILLA DE ACCIONES (CON MOVIMIENTO SUAVE)
+   ========================================================================== */
 .actions-grid {
     margin-top: 0.9rem;
     display: grid;
@@ -181,21 +223,33 @@
     max-width: 920px;
     margin-left: auto;
     margin-right: auto;
+    padding-top: 12px;
+    padding-bottom: 12px;
+    overflow: visible !important;
 }
 
 .action-card {
-    min-height: 136px;
+    min-height: 95px; /* Altura mucho más baja */
     display: flex;
     flex-direction: column;
-    justify-content: flex-start;
+    justify-content: center; /* Centra el contenido eliminando el vacío */
     align-items: center;
-    gap: 1.15rem;
-    padding: 0.85rem 0.6rem;
+    gap: 0.4rem; /* Separación mínima entre título y botón */
+    padding: 0.5rem; /* Menos margen interno */
     background: var(--timeon-card-bg) !important;
     border: 1px solid var(--timeon-border-subtle);
     border-radius: 8px;
     text-align: center;
+    will-change: transform, box-shadow;
+    transition: transform 0.2s ease-out, box-shadow 0.2s ease-out;
 }
+
+
+    .action-card:hover {
+        transform: translateY(-6px);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+        z-index: 5;
+    }
 
 .action-title {
     font-size: 0.92rem;
@@ -206,19 +260,145 @@
 
 .action-button-row {
     width: 100%;
-    margin-top: auto;
-    padding-top: 0.9rem;
+    margin-top: 0;
+    padding-top: 0;
     display: flex;
     justify-content: center;
 }
 
-.action-button {
+
+.action-card .action-button,
+.action-card fluent-button {
     width: auto !important;
     min-width: 104px;
     display: inline-flex !important;
-    justify-content: center;
 }
 
+/* ==========================================================================
+   RESUMEN DIARIO
+   ========================================================================== */
+/* ==========================================================================
+   RESUMEN DIARIO (CORREGIDO PARA DIV TRADICIONAL)
+   ========================================================================== */
+.day-summary-section {
+    margin-top: 1rem;
+}
+
+.day-summary-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.day-summary-title {
+    font-size: 0.96rem;
+    font-weight: 700;
+    color: var(--timeon-text-primary);
+}
+
+.day-summary-subtitle {
+    margin-top: 0.2rem;
+    font-size: 0.8rem;
+    color: var(--timeon-text-secondary);
+}
+
+.day-summary-list {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.day-summary-card {
+    background: var(--timeon-card-bg) !important;
+    border: 1px solid var(--timeon-border-subtle);
+    border-radius: 8px;
+    padding: 0.85rem 0.95rem;
+    box-sizing: border-box;
+}
+
+    /* Fuerza el indicador lateral sobre el div HTML nativo */
+    .day-summary-card.is-current {
+        border-left: 4px solid var(--timeon-accent) !important;
+    }
+
+.day-summary-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.day-summary-card-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--timeon-text-primary);
+}
+
+.day-summary-status {
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+    .day-summary-status.status-working {
+        color: var(--timeon-success);
+    }
+
+    .day-summary-status.status-break {
+        color: var(--timeon-break);
+    }
+
+    .day-summary-status.status-off {
+        color: var(--timeon-off);
+    }
+
+    .day-summary-status.status-finished {
+        color: var(--timeon-finished);
+    }
+
+.day-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(150px, 1fr));
+    gap: 0.7rem 1rem;
+}
+
+.day-summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.18rem;
+}
+
+.day-summary-label {
+    font-size: 0.76rem;
+    color: var(--timeon-text-secondary) !important;
+}
+
+.day-summary-value {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--timeon-text-primary) !important;
+}
+
+    .day-summary-value.status-working {
+        color: var(--timeon-success);
+    }
+
+    .day-summary-value.status-break {
+        color: var(--timeon-break);
+    }
+
+    .day-summary-value.status-off {
+        color: var(--timeon-off);
+    }
+
+    .day-summary-value.status-finished {
+        color: var(--timeon-finished);
+    }
+
+/* ==========================================================================
+   VISTAS RESPONSIVAS AJUSTADAS (MEDIA QUERIES)
+   ========================================================================== */
 @media (max-width: 960px) {
     .hero {
         grid-template-columns: 1fr;
@@ -232,10 +412,23 @@
     .actions-grid {
         grid-template-columns: repeat(2, minmax(140px, 1fr));
     }
+
+    .day-summary-grid {
+        grid-template-columns: repeat(2, minmax(140px, 1fr));
+    }
+
+    .day-summary-card-header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
 }
 
 @media (max-width: 540px) {
     .actions-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .day-summary-grid {
         grid-template-columns: 1fr;
     }
 }
