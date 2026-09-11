@@ -9,6 +9,7 @@
 @inject ITimeonApiClient TimeonApiClient
 @inject MicrosoftTeams MicrosoftTeams
 
+
 @implements IDisposable
 
 @if (isLoading)
@@ -192,6 +193,13 @@ else
     private string teamsThemeClass = "teams-theme-default";
     private DotNetObjectReference<TimeonDashboard>? themeCallbackReference;
 
+    // Localización
+    private string? GeolocationStart { get; set; }
+    private string? GeolocationEnd { get; set; }
+    public string? Geolocation { get; set; }
+    // Referencia a la instancia del componente para invocar métodos JS
+    private DotNetObjectReference<TimeonDashboard>? dotNetRef;
+
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -199,6 +207,9 @@ else
         {
             return;
         }
+
+        //creamos la ref para que JS pueda comunicarse con este componente
+        dotNetRef = DotNetObjectReference.Create(this);
 
         await InitializeTeamsThemeAsync();
 
@@ -219,6 +230,7 @@ else
     {
         timer?.Dispose();
         themeCallbackReference?.Dispose();
+        dotNetRef?.Dispose();
     }
 
     private async Task InitializeTeamsThemeAsync()
@@ -258,12 +270,23 @@ else
 
     private async Task StartWorkAsync()
     {
+        string? location = await GetLocationAsync();
+
         if (dashboard?.Employee is null)
         {
             return;
         }
 
-        await ExecuteActionAsync(() => TimeonApiClient.StartWorkAsync(dashboard.Employee.Id, ssoToken));
+        if (string.IsNullOrEmpty(location))
+        {
+            await dialogService.AlertAsync("No se pudo obtener la ubicación, inténtalo de nuevo", "Error");
+            return;
+        }
+
+        // Guardamos la ubicación
+        GeolocationStart = location;
+
+        await ExecuteActionAsync(() => TimeonApiClient.StartWorkAsync(dashboard.Employee.Id, ssoToken, GeolocationStart));
     }
 
     private async Task StartBreakAsync()
@@ -288,14 +311,25 @@ else
 
     private async Task EndWorkAsync()
     {
+        string? location = await GetLocationAsync();
+
         if (dashboard?.Employee is null)
         {
             return;
         }
 
+        if (string.IsNullOrEmpty(location))
+        {
+            await dialogService.AlertAsync("No se pudo obtener la ubicación, inténtalo de nuevo", "Error");
+            return;
+        }
+
+        // Guardamos la ubicación
+        GeolocationStart = location;
+
         try
         {
-            var result = await TimeonApiClient.EndWorkAsync(dashboard.Employee.Id, ssoToken);
+            var result = await TimeonApiClient.EndWorkAsync(dashboard.Employee.Id, ssoToken, GeolocationEnd);
             actionMessage = result.Message;
 
             if (!result.Success)
@@ -706,5 +740,31 @@ else
         }
 
         return null;
+    }
+
+    /// MÉTODOS PARA UBICACIÓN
+    private TaskCompletionSource<string?> _locationTcs;
+
+    private async Task<string?> GetLocationAsync()
+    {
+        _locationTcs = new TaskCompletionSource<string?>();
+        await JS.InvokeVoidAsync("getCurrentLocation", dotNetRef);
+        return await _locationTcs.Task; // Espera hasta que JS invoque SetLocation
+
+    }
+
+    // Mëtodo invocado por JS para recibir la ubicación
+    [JSInvokable("setLocation")]
+    public void SetLocation(double lat, double lng)
+    {
+        Geolocation = $"{lat},{lng}";
+        _locationTcs?.TrySetResult(Geolocation);
+        StateHasChanged();
+    }
+
+    // pedimos la ubi al navegador (usando JS)
+    private async Task GetLocation()
+    {
+        await JS.InvokeVoidAsync("getCurrentLocation", dotNetRef);
     }
 }
