@@ -1,10 +1,13 @@
 // Program.cs — configuración y arranque de la aplicación Blazor Server con componentes interactivos y cliente HTTP para Timeon.
 
+using Microsoft.FluentUI.AspNetCore.Components;
+using Syncfusion.Blazor;
+using Syncfusion.Blazor.Popups;
+using Syncfusion.Licensing;
 using TabTeams;
 using TabTeams.Components;
 using TabTeams.Interop.TeamsSDK;
 using TabTeams.Timeon;
-using Microsoft.FluentUI.AspNetCore.Components;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,8 +29,9 @@ builder.Services.AddScoped<MicrosoftTeams>();
 builder.Services.AddHttpClient<ITimeonApiClient, TimeonApiClient>((serviceProvider, client) =>
 {
     var configuration = serviceProvider.GetRequiredService<IConfiguration>();
+    
     // Leer base URL desde configuración; usar URL por defecto si no está presente.
-    var baseUrl = configuration["TimeonApi:BaseUrl"] ?? "https://timeonapi-dugye5abd6fbc5dh.spaincentral-01.azurewebsites.net";
+    var baseUrl = configuration["TimeonApi:BaseUrl"] ?? "https://apitimeon-gpa9hzbpgsdvfsg2.spaincentral-01.azurewebsites.net";
     if (!baseUrl.EndsWith('/'))
     {
         baseUrl += "/";
@@ -51,6 +55,13 @@ builder.Services.AddAntiforgery(o => o.SuppressXFrameOptionsHeader = true);
 
 // Registrar la configuración de la librería Fluent UI (u otra configuración global).
 builder.Services.AddSingleton<LibraryConfiguration>();
+
+// LIcencia de Syncfusion
+// Corrected the configuration of Syncfusion Blazor options  
+SyncfusionLicenseProvider.RegisterLicense("Ngo9BigBOggjHTQxAR8/V1NHaF5cXmVCf1FpRmJGdld5fUVHYVZUTXxaS00DNHVRdkdmWXpedHRQRWRYVkN/WEFWYUo=");
+
+builder.Services.AddSyncfusionBlazor();
+builder.Services.AddScoped<SfDialogService>();
 
 var app = builder.Build();
 

@@ -1,5 +1,8 @@
 #nullable enable
 
+using Microsoft.Bot.Builder;
+using Microsoft.Graph.Models;
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -14,6 +17,8 @@ namespace TabTeams.Timeon;
 // - Manejo básico de errores y parsing flexible de respuestas JSON.
 public sealed class TimeonApiClient : ITimeonApiClient
 {
+    private const string OpenCageApiKey = "71a75b415e58492a992d0d73382ef4f7";
+
     // Opciones de JsonSerializer: ignorar mayúsculas/minúsculas en nombres de propiedades.
     private static readonly JsonSerializerOptions JsonSerializerOptions = new()
     {
@@ -22,7 +27,7 @@ public sealed class TimeonApiClient : ITimeonApiClient
 
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
-
+    
     // Caché del JWT devuelto por el endpoint de intercambio SSO -> JWT.
     // Se cachea para evitar canjes repetidos; se invalida con base en _cachedJwtExpiryUtc.
     private string? _cachedJwtFromExchange;
@@ -104,13 +109,22 @@ public sealed class TimeonApiClient : ITimeonApiClient
     // Operaciones de escritura en la API que delegan a ExecutePostAsync:
     // - StartWorkAsync, StartBreakAsync, EndBreakAsync, EndWorkAsync
     // Cada una construye el payload adecuado y un mensaje de éxito legible.
-    public Task<TimeonActionResult> StartWorkAsync(int employeeId, string? accessToken, CancellationToken cancellationToken = default)
+    public async Task<TimeonActionResult> StartWorkAsync(int employeeId, string? accessToken, string? geolocationStart, CancellationToken cancellationToken = default)
     {
-        return ExecutePostAsync(
+        string? address = null;
+        // Si hay coordenadas, obtenemos la dirección
+        if (TryParseCoordinates(geolocationStart, out var latitude, out var longitude))
+        {
+            address = await GetAddressFromCoordinateAsync(latitude, longitude);
+        }
+
+        return await ExecutePostAsync(
             "/api/TimeLog/starttimelog",
             new TimeLogRequest
             {
-                EmployeeId = employeeId
+                EmployeeId = employeeId,
+                Geolocation = geolocationStart,
+                Address = address
             },
             accessToken,
             "Entrada registrada.",
@@ -145,13 +159,21 @@ public sealed class TimeonApiClient : ITimeonApiClient
             cancellationToken);
     }
 
-    public Task<TimeonActionResult> EndWorkAsync(int employeeId, string? accessToken, CancellationToken cancellationToken = default)
+    public async Task<TimeonActionResult> EndWorkAsync(int employeeId, string? accessToken, string? geolocationEnd, CancellationToken cancellationToken = default)
     {
-        return ExecutePostAsync(
+        string? address = null;
+        // Si hay coordenadas, obtenemos la dirección
+        if (TryParseCoordinates(geolocationEnd, out var latitude, out var longitude))
+        {
+            address = await GetAddressFromCoordinateAsync(latitude, longitude);
+        }
+        return await ExecutePostAsync(
             "/api/TimeLog/endtimelog",
             new TimeLogRequest
             {
-                EmployeeId = employeeId
+                EmployeeId = employeeId,
+                Geolocation = geolocationEnd,
+                Address = address
             },
             accessToken,
             "Salida registrada.",
@@ -696,5 +718,79 @@ public sealed class TimeonApiClient : ITimeonApiClient
         }
 
         return $"{singleLine[..160]}...";
+    }
+
+    /// /// /// GEOLOCALIZACIÓN /// /// ///
+    /// //////                  //////////
+    
+    private async Task<string?> GetAddressFromCoordinateAsync(double latitude, double longitude)
+    {
+        try
+        {
+            // convertimos las coordenadas a cadenas y remplazamos comas por puntos
+            string latString = latitude.ToString(CultureInfo.InvariantCulture).Replace(',', '.');
+            string lonString = longitude.ToString(CultureInfo.InvariantCulture).Replace(',', '.');
+
+            var url = $"https://api.opencagedata.com/geocode/v1/json?q={latString},{lonString}&key={OpenCageApiKey}&language=es&pretty=1&address_only=1";
+
+            using var response = await _httpClient.GetAsync(url);
+            if(!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            var jsonString = await response.Content.ReadAsStringAsync();
+            using var jsonDoc = JsonDocument.Parse(jsonString);
+            var root = jsonDoc.RootElement;
+
+            if (root.TryGetProperty("results", out var results) && results.GetArrayLength() > 0)
+            {
+                return results[0].GetProperty("formatted").GetString();
+            }
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error al obtener la dirección: {ex.Message}");
+            return null;
+        }
+    }
+
+    private bool TryParseCoordinates(string? rawInput, out double latitude, out double longitude)
+    {
+        latitude = 0;
+        longitude = 0;
+
+        if (string.IsNullOrEmpty(rawInput))
+            return false;
+
+        // Elimina espacios incesarios
+        rawInput = rawInput.Trim();
+
+        // Caso 1: Coordenadas en formato con 4 partes (ej: "39, 94992, -0, 09765")
+        var commaParts = rawInput.Split(',');
+        if (commaParts.Length == 4)
+        {
+            string latStr = $"{commaParts[0]}.{commaParts[1]}"; // "39.946992"
+            string lonStr = $"{commaParts[2]}.{commaParts[3]}"; // "-0.097655"
+
+            return double.TryParse(latStr, NumberStyles.Any, CultureInfo.InvariantCulture, out latitude) &&
+                    double.TryParse(lonStr, NumberStyles.Any , CultureInfo.InvariantCulture, out longitude);
+        }
+
+        // CAso 2: Coordenadas en formato estándar (j: "39.946991,-0.097655" o con coma como separador decimal por error)
+        var parts = rawInput.Split(",", StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 2)
+        {
+            // Remplazar posibles comas decimale spor puntos si las hubiera
+            string lasStr = parts[0].Replace(',', '.');
+            string lonStr = parts[1].Replace(",", ".");
+
+            return double.TryParse(lasStr, NumberStyles.Any, CultureInfo.InvariantCulture, out latitude) &&
+                 double.TryParse(lonStr, NumberStyles.Any, CultureInfo.InvariantCulture, out longitude);
+        }
+
+        return false;
     }
 }
